@@ -9,7 +9,7 @@ import requests_kerberos
 from bs4 import BeautifulSoup
 from requests.exceptions import Timeout, HTTPError, InvalidURL, ConnectionError
 from simplejson import JSONDecodeError
-from six import iteritems
+from six import iteritems, itervalues
 from six.moves.urllib.parse import urljoin, urlsplit, urlunsplit, urlparse
 
 from datadog_checks.base import AgentCheck, ConfigurationError, is_affirmative
@@ -63,92 +63,90 @@ SUCCESS_STATUS = ['SUCCEEDED', 'COMPLETE']
 SOURCE_TYPE_NAME = 'spark'
 
 # Metric types
-INCREMENT = 'increment'
 GAUGE = 'gauge'
 COUNT = 'count'
-MONOTONIC_COUNT = 'monotonic_count'
 
 # Metrics to collect
 SPARK_JOB_METRICS = {
-    'numTasks': ('spark.job.num_tasks', INCREMENT),
-    'numActiveTasks': ('spark.job.num_active_tasks', INCREMENT),
-    'numCompletedTasks': ('spark.job.num_completed_tasks', INCREMENT),
-    'numSkippedTasks': ('spark.job.num_skipped_tasks', INCREMENT),
-    'numFailedTasks': ('spark.job.num_failed_tasks', INCREMENT),
-    'numActiveStages': ('spark.job.num_active_stages', INCREMENT),
-    'numCompletedStages': ('spark.job.num_completed_stages', INCREMENT),
-    'numSkippedStages': ('spark.job.num_skipped_stages', INCREMENT),
-    'numFailedStages': ('spark.job.num_failed_stages', INCREMENT)
+    'numTasks': ('spark.job.num_tasks', COUNT),
+    'numActiveTasks': ('spark.job.num_active_tasks', COUNT),
+    'numCompletedTasks': ('spark.job.num_completed_tasks', COUNT),
+    'numSkippedTasks': ('spark.job.num_skipped_tasks', COUNT),
+    'numFailedTasks': ('spark.job.num_failed_tasks', COUNT),
+    'numActiveStages': ('spark.job.num_active_stages', COUNT),
+    'numCompletedStages': ('spark.job.num_completed_stages', COUNT),
+    'numSkippedStages': ('spark.job.num_skipped_stages', COUNT),
+    'numFailedStages': ('spark.job.num_failed_stages', COUNT)
 }
 
 SPARK_STAGE_METRICS = {
-    'numActiveTasks': ('spark.stage.num_active_tasks', INCREMENT),
-    'numCompleteTasks': ('spark.stage.num_complete_tasks', INCREMENT),
-    'numFailedTasks': ('spark.stage.num_failed_tasks', INCREMENT),
-    'executorRunTime': ('spark.stage.executor_run_time', INCREMENT),
-    'inputBytes': ('spark.stage.input_bytes', INCREMENT),
-    'inputRecords': ('spark.stage.input_records', INCREMENT),
-    'outputBytes': ('spark.stage.output_bytes', INCREMENT),
-    'outputRecords': ('spark.stage.output_records', INCREMENT),
-    'shuffleReadBytes': ('spark.stage.shuffle_read_bytes', INCREMENT),
-    'shuffleReadRecords': ('spark.stage.shuffle_read_records', INCREMENT),
-    'shuffleWriteBytes': ('spark.stage.shuffle_write_bytes', INCREMENT),
-    'shuffleWriteRecords': ('spark.stage.shuffle_write_records', INCREMENT),
-    'memoryBytesSpilled': ('spark.stage.memory_bytes_spilled', INCREMENT),
-    'diskBytesSpilled': ('spark.stage.disk_bytes_spilled', INCREMENT)
+    'numActiveTasks': ('spark.stage.num_active_tasks', COUNT),
+    'numCompleteTasks': ('spark.stage.num_complete_tasks', COUNT),
+    'numFailedTasks': ('spark.stage.num_failed_tasks', COUNT),
+    'executorRunTime': ('spark.stage.executor_run_time', COUNT),
+    'inputBytes': ('spark.stage.input_bytes', COUNT),
+    'inputRecords': ('spark.stage.input_records', COUNT),
+    'outputBytes': ('spark.stage.output_bytes', COUNT),
+    'outputRecords': ('spark.stage.output_records', COUNT),
+    'shuffleReadBytes': ('spark.stage.shuffle_read_bytes', COUNT),
+    'shuffleReadRecords': ('spark.stage.shuffle_read_records', COUNT),
+    'shuffleWriteBytes': ('spark.stage.shuffle_write_bytes', COUNT),
+    'shuffleWriteRecords': ('spark.stage.shuffle_write_records', COUNT),
+    'memoryBytesSpilled': ('spark.stage.memory_bytes_spilled', COUNT),
+    'diskBytesSpilled': ('spark.stage.disk_bytes_spilled', COUNT)
 }
 
 SPARK_DRIVER_METRICS = {
-    'rddBlocks': ('spark.driver.rdd_blocks', INCREMENT),
-    'memoryUsed': ('spark.driver.memory_used', INCREMENT),
-    'diskUsed': ('spark.driver.disk_used', INCREMENT),
-    'activeTasks': ('spark.driver.active_tasks', INCREMENT),
-    'failedTasks': ('spark.driver.failed_tasks', INCREMENT),
-    'completedTasks': ('spark.driver.completed_tasks', INCREMENT),
-    'totalTasks': ('spark.driver.total_tasks', INCREMENT),
-    'totalDuration': ('spark.driver.total_duration', INCREMENT),
-    'totalInputBytes': ('spark.driver.total_input_bytes', INCREMENT),
-    'totalShuffleRead': ('spark.driver.total_shuffle_read', INCREMENT),
-    'totalShuffleWrite': ('spark.driver.total_shuffle_write', INCREMENT),
-    'maxMemory': ('spark.driver.max_memory', INCREMENT)
+    'rddBlocks': ('spark.driver.rdd_blocks', COUNT),
+    'memoryUsed': ('spark.driver.memory_used', COUNT),
+    'diskUsed': ('spark.driver.disk_used', COUNT),
+    'activeTasks': ('spark.driver.active_tasks', COUNT),
+    'failedTasks': ('spark.driver.failed_tasks', COUNT),
+    'completedTasks': ('spark.driver.completed_tasks', COUNT),
+    'totalTasks': ('spark.driver.total_tasks', COUNT),
+    'totalDuration': ('spark.driver.total_duration', COUNT),
+    'totalInputBytes': ('spark.driver.total_input_bytes', COUNT),
+    'totalShuffleRead': ('spark.driver.total_shuffle_read', COUNT),
+    'totalShuffleWrite': ('spark.driver.total_shuffle_write', COUNT),
+    'maxMemory': ('spark.driver.max_memory', COUNT)
 }
 
 SPARK_EXECUTOR_METRICS = {
-    'rddBlocks': ('spark.executor.rdd_blocks', INCREMENT),
-    'memoryUsed': ('spark.executor.memory_used', INCREMENT),
-    'diskUsed': ('spark.executor.disk_used', INCREMENT),
-    'activeTasks': ('spark.executor.active_tasks', INCREMENT),
-    'failedTasks': ('spark.executor.failed_tasks', INCREMENT),
-    'completedTasks': ('spark.executor.completed_tasks', INCREMENT),
-    'totalTasks': ('spark.executor.total_tasks', INCREMENT),
-    'totalDuration': ('spark.executor.total_duration', INCREMENT),
-    'totalInputBytes': ('spark.executor.total_input_bytes', INCREMENT),
-    'totalShuffleRead': ('spark.executor.total_shuffle_read', INCREMENT),
-    'totalShuffleWrite': ('spark.executor.total_shuffle_write', INCREMENT),
-    'maxMemory': ('spark.executor.max_memory', INCREMENT)
+    'rddBlocks': ('spark.executor.rdd_blocks', COUNT),
+    'memoryUsed': ('spark.executor.memory_used', COUNT),
+    'diskUsed': ('spark.executor.disk_used', COUNT),
+    'activeTasks': ('spark.executor.active_tasks', COUNT),
+    'failedTasks': ('spark.executor.failed_tasks', COUNT),
+    'completedTasks': ('spark.executor.completed_tasks', COUNT),
+    'totalTasks': ('spark.executor.total_tasks', COUNT),
+    'totalDuration': ('spark.executor.total_duration', COUNT),
+    'totalInputBytes': ('spark.executor.total_input_bytes', COUNT),
+    'totalShuffleRead': ('spark.executor.total_shuffle_read', COUNT),
+    'totalShuffleWrite': ('spark.executor.total_shuffle_write', COUNT),
+    'maxMemory': ('spark.executor.max_memory', COUNT)
 }
 
 SPARK_RDD_METRICS = {
-    'numPartitions': ('spark.rdd.num_partitions', INCREMENT),
-    'numCachedPartitions': ('spark.rdd.num_cached_partitions', INCREMENT),
-    'memoryUsed': ('spark.rdd.memory_used', INCREMENT),
-    'diskUsed': ('spark.rdd.disk_used', INCREMENT)
+    'numPartitions': ('spark.rdd.num_partitions', COUNT),
+    'numCachedPartitions': ('spark.rdd.num_cached_partitions', COUNT),
+    'memoryUsed': ('spark.rdd.memory_used', COUNT),
+    'diskUsed': ('spark.rdd.disk_used', COUNT)
 }
 
 SPARK_STREAMING_STATISTICS_METRICS = {
-    'avgInputRate': ('spark.streaming.statistics.avg_input_rate', GAUGE),
-    'avgProcessingTime': ('spark.streaming.statistics.avg_processing_time', GAUGE),
-    'avgSchedulingDelay': ('spark.streaming.statistics.avg_scheduling_delay', GAUGE),
-    'avgTotalDelay': ('spark.streaming.statistics.avg_total_delay', GAUGE),
-    'batchDuration': ('spark.streaming.statistics.batch_duration', GAUGE),
-    'numActiveBatches': ('spark.streaming.statistics.num_active_batches', GAUGE),
-    'numActiveReceivers': ('spark.streaming.statistics.num_active_receivers', GAUGE),
-    'numInactiveReceivers': ('spark.streaming.statistics.num_inactive_receivers', GAUGE),
-    'numProcessedRecords': ('spark.streaming.statistics.num_processed_records', MONOTONIC_COUNT),
-    'numReceivedRecords': ('spark.streaming.statistics.num_received_records', MONOTONIC_COUNT),
-    'numReceivers': ('spark.streaming.statistics.num_receivers', GAUGE),
-    'numRetainedCompletedBatches': ('spark.streaming.statistics.num_retained_completed_batches', MONOTONIC_COUNT),
-    'numTotalCompletedBatches': ('spark.streaming.statistics.num_total_completed_batches', MONOTONIC_COUNT)
+    'avgInputRate': ('spark.streaming.statistics.avg_input_rate', COUNT),
+    'avgProcessingTime': ('spark.streaming.statistics.avg_processing_time', COUNT),
+    'avgSchedulingDelay': ('spark.streaming.statistics.avg_scheduling_delay', COUNT),
+    'avgTotalDelay': ('spark.streaming.statistics.avg_total_delay', COUNT),
+    'batchDuration': ('spark.streaming.statistics.batch_duration', COUNT),
+    'numActiveBatches': ('spark.streaming.statistics.num_active_batches', COUNT),
+    'numActiveReceivers': ('spark.streaming.statistics.num_active_receivers', COUNT),
+    'numInactiveReceivers': ('spark.streaming.statistics.num_inactive_receivers', COUNT),
+    'numProcessedRecords': ('spark.streaming.statistics.num_processed_records', COUNT),
+    'numReceivedRecords': ('spark.streaming.statistics.num_received_records', COUNT),
+    'numReceivers': ('spark.streaming.statistics.num_receivers', COUNT),
+    'numRetainedCompletedBatches': ('spark.streaming.statistics.num_retained_completed_batches', COUNT),
+    'numTotalCompletedBatches': ('spark.streaming.statistics.num_total_completed_batches', COUNT)
 }
 
 RequestsConfig = namedtuple(
@@ -495,16 +493,22 @@ class SparkCheck(AgentCheck):
                 SPARK_APPS_PATH,
                 SPARK_SERVICE_CHECK, requests_config, addl_tags, app_id, 'jobs')
 
+            tags = ['app_name:{}'.format(app_name)]
+            tags.extend(addl_tags)
+            status_cache = {}
+
             for job in response:
 
                 status = job.get('status')
+                if status not in status_cache:
+                    status_cache[status] = {'count': 0, 'tags': ['status:{}'.format(str(status).lower())]}
+                    status_cache[status]['tags'].extend(tags)
 
-                tags = ['app_name:%s' % str(app_name)]
-                tags.extend(addl_tags)
-                tags.append('status:%s' % str(status).lower())
+                status_cache[status]['count'] += 1
+                self._set_metrics_from_json(status_cache[status]['tags'], job, SPARK_JOB_METRICS)
 
-                self._set_metrics_from_json(tags, job, SPARK_JOB_METRICS)
-                self._set_metric('spark.job.count', INCREMENT, 1, tags)
+            for data in itervalues(status_cache):
+                self._set_metric('spark.job.count', GAUGE, data['count'], data['tags'])
 
     def _spark_stage_metrics(self, instance, running_apps, addl_tags, requests_config):
         """
@@ -518,16 +522,22 @@ class SparkCheck(AgentCheck):
                 SPARK_APPS_PATH,
                 SPARK_SERVICE_CHECK, requests_config, addl_tags, app_id, 'stages')
 
+            tags = ['app_name:{}'.format(app_name)]
+            tags.extend(addl_tags)
+            status_cache = {}
+
             for stage in response:
 
                 status = stage.get('status')
+                if status not in status_cache:
+                    status_cache[status] = {'count': 0, 'tags': ['status:{}'.format(str(status).lower())]}
+                    status_cache[status]['tags'].extend(tags)
 
-                tags = ['app_name:%s' % str(app_name)]
-                tags.extend(addl_tags)
-                tags.append('status:%s' % str(status).lower())
+                status_cache[status]['count'] += 1
+                self._set_metrics_from_json(status_cache[status]['tags'], stage, SPARK_STAGE_METRICS)
 
-                self._set_metrics_from_json(tags, stage, SPARK_STAGE_METRICS)
-                self._set_metric('spark.stage.count', INCREMENT, 1, tags)
+            for data in itervalues(status_cache):
+                self._set_metric('spark.stage.count', GAUGE, data['count'], data['tags'])
 
     def _spark_executor_metrics(self, instance, running_apps, addl_tags, requests_config):
         """
@@ -551,7 +561,7 @@ class SparkCheck(AgentCheck):
                     self._set_metrics_from_json(tags, executor, SPARK_EXECUTOR_METRICS)
 
             if len(response):
-                self._set_metric('spark.executor.count', INCREMENT, len(response), tags)
+                self._set_metric('spark.executor.count', GAUGE, len(response), tags)
 
     def _spark_rdd_metrics(self, instance, running_apps, addl_tags, requests_config):
         """
@@ -572,7 +582,7 @@ class SparkCheck(AgentCheck):
                 self._set_metrics_from_json(tags, rdd, SPARK_RDD_METRICS)
 
             if len(response):
-                self._set_metric('spark.rdd.count', INCREMENT, len(response), tags)
+                self._set_metric('spark.rdd.count', GAUGE, len(response), tags)
 
     def _spark_streaming_statistics_metrics(self, instance, running_apps, addl_tags, requests_config):
         """
@@ -620,14 +630,10 @@ class SparkCheck(AgentCheck):
         """
         if tags is None:
             tags = []
-        if metric_type == INCREMENT:
-            self.increment(metric_name, value, tags=tags)
-        elif metric_type == GAUGE:
+        if metric_type == GAUGE:
             self.gauge(metric_name, value, tags=tags)
         elif metric_type == COUNT:
             self.count(metric_name, value, tags=tags)
-        elif metric_type == MONOTONIC_COUNT:
-            self.monotonic_count(metric_name, value, tags=tags)
         else:
             self.log.error('Metric type "{}" unknown'.format(metric_type))
 
